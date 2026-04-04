@@ -22,9 +22,9 @@ def _setup():
       filename = h_conf.get('filename')
       if filename:
         log_path = Path(filename)
-        log_path.parent.mkdir(parents = True, exist_ok = True)
+        log_path.parent.mkdir(parents = True, exist_ok = True) #tạo thư mục nếu chưa tồn tại gồm cả thư mục cha nếu cần
     
-    logging.config.dictConfig(conf)
+    logging.config.dictConfig(conf) #cấu hình logging theo file YAML
     _configured = True
 
 def get_logger(name: str) -> logging.Logger:
