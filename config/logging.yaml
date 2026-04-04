@@ -3,67 +3,34 @@ disable_existing_loggers: false
 
 formatters:
   standard:
-    format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    format: "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
     datefmt: "%Y-%m-%d %H:%M:%S"
-  simple:
-    format: "[%(levelname)s] %(message)s"
 
 handlers:
   console:
     class: logging.StreamHandler
     level: INFO
-    formatter: simple
+    formatter: standard
     stream: ext://sys.stdout
 
   file:
     class: logging.handlers.RotatingFileHandler
     level: DEBUG
     formatter: standard
-    filename: logs/app.log
-    maxBytes: 5242880   # 5MB
+    filename: logs/applications.log
+    maxBytes: 5242880   
     backupCount: 3
-    encoding: utf-8
-
-  error_file:
-    class: logging.handlers.RotatingFileHandler
-    level: ERROR
-    formatter: standard
-    filename: logs/error.log
-    maxBytes: 5242880
-    backupCount: 3
-    encoding: utf-8
-
-loggers:
-  ingestion:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: false
-
-  embedder:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: false
-
-  retriever:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: false
-
-  generator:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: false
-
-  vector_store:
-    level: DEBUG
-    handlers: [console, file]
-    propagate: false
-
-  chatbot:
-    level: INFO
-    handlers: [console, file]
-    propagate: false
 
 root:
-  level: INFO
-  handlers: [console, file, error_file]
+  level: DEBUG
+  handlers: [console, file]
+
+loggers:
+  rag_v2:
+    level: DEBUG
+    handlers: [console, file]
+    propagate: false
+  qdrant_client:
+    level: WARNING
+  httpx:
+    level: WARNING
