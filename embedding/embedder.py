@@ -1,35 +1,68 @@
+from __future__ import annotations
 import time
-import google.generativeai as genai
-from core.load_settings import cfg
-import logging
+from google import genai
+from google.genai import types, errors
+from config.settings import cfg
+from core.logger import get_logger
 
-logger = logging.getLogger('embedder')
+log = get_logger(__name__)
 
-class Embedder:
-  def __init__(self):
-    genai.configure(api_key=cfg.GEMINI_API_KEY)
-    self.model = cfg.EMBEDDING_MODEL
+_client: genai.Client | None = None
 
-  def embed_texts(self, texts: list[str]) -> list[list[float]]:
-    results = []
-    for i, text in enumerate(texts):
-      logger.info(f'Embedding {i+1}/{len(texts)}...')
-      results.append(self._embed_one(text))
-      time.sleep(0.1)  # Thêm delay để tránh rate limit
-    return results
-  
-  def embed_query(self, query: str) -> list[float]:
-    return self._embed_one(query)
-  
-  def _embed_one(self, text:str, max_retries: int = 3) -> list[float]:
-    for attempt in range(max_retries):
+def _get_client() -> genai.Client:
+  global _client # Sử dụng biến toàn cục để lưu trữ client đã khởi tạo
+  if _client is None:
+    _client = genai.Client(api_key = cfg.google.api_key)
+  return _client
+
+def embed_texts(text: str) -> list[float]:
+  client = _get_client()
+  for attempt in range(3):
+    try:
+      result = client.models.embed_content(
+        model = cfg.gemini.embedding_model,
+        contents = text
+      )
+      return result.embeddings[0].values
+    except errors.ClientError as e:
+      # Lỗi 429 thường do giới hạn tốc độ, nên thử lại sau một khoảng thời gian
+      if "429" in str(e) and attempt < 2:
+        log.warning(f'Rate limit (429). Waiting 10s... (Attempt {attempt + 1}/3)')
+        time.sleep(10)
+        continue
+      raise e
+  return []
+
+def embed_batch(texts: list[str], batch_size: int = 50) -> list[list[float]]:
+  client = _get_client()
+  all_embeddings: list[list[float]] = []
+
+  for i in range(0, len(texts), batch_size):
+    batch = texts[i: i+batch_size]
+    batch_num = i// batch_size + 1
+    log.info(f"Embedding batch {batch_num} with {len(batch)} texts...")
+
+    success = False
+    attempts = 0
+    while not success and attempts < 5:
       try:
-        res = genai.embed_content(model = self.model, content = text)
-        return res['embedding']
-      except Exception as e:
-        if attempt == max_retries - 1:
-          raise RuntimeError(f'Failed to embed text after {max_retries} attempts: {e}')
-        wait = 2**(attempt + 1)
-        logger.error(f'Error embedding text (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait} seconds...')
-        time.sleep(wait)
-    return []
+        result = client.models.embed_content(
+          model = cfg.gemini.embedding_model,
+          contents = batch
+        )
+        for emb in result.emnbeddings:
+          all_embeddings.append(emb.values)
+        success = True
+        time.sleep(2) # Thêm delay nhỏ giữa các batch để giảm nguy cơ bị rate limit
+      
+      except errors.ClientError as e:
+        attempts += 1
+        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e): # Nếu gặp lỗi giới hạn tốc độ hoặc tài nguyên, tăng thời gian chờ theo cấp số nhân
+          wait_time = 15 * attempts
+          log.warning(f'Rate limit or resource exhausted. Waiting {wait_time}s... (Attempt {attempts}/5)')
+          time.sleep(wait_time)
+        else:
+          log.error(f"Error embedding batch {batch_num}: {e}")
+          raise e
+        
+  return all_embeddings
