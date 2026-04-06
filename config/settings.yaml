@@ -9,8 +9,7 @@ qdrant:
   host: "localhost"
   port: 6333
   local_path: "./qdrant_data"
-  product_collection: "laptop_products"
-  company_collection: "company_info"
+  knowledge_collection: "laptop_company"
   vector_size: 3072 #khi dung gemini-embedding-001, vector_size = 3072; khi dung text-embedding-3-small, vector_size = 1536
 
 # ─── Gemini ──────────────────────────────────────────────
