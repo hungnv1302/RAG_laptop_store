@@ -52,3 +52,61 @@ def _classify_line(line: str) -> str | None:
     return stripped
   
   return None
+
+def load_pdf_chunk(pdf_path: Path | None = None, max_chunk_size: int = 800)-> list[dict[str, Any]]:
+  # Trả về danh sách có dạng {"text": ..., "metadata": {"source": ..., "section": ...}}
+
+  path = pdf_path or cfg.paths.pdf_path
+  log.info(f'Loading PDF from {path}')
+
+  pages_text: list[str] = [] # list gồm các trang pdf
+  with pdfplumber.open(path) as pdf:
+    for page in pdf.pages:
+      text = page.extract_text() or ""
+      pages_text.append(text)
+
+  full_text = '\n\n'.join(pages_text)
+  lines = full_text.split('\n')
+
+  chunks: list[dict[str, Any]] = []
+  current_section = 'Thông tin chung'
+  current_lines: list[str] = []
+
+  def _flush():
+    if not current_lines:
+      return
+    
+    text = '\n'.join(current_lines).strip()
+    if text:
+      chunks.append({
+        'text': text,
+        'metadata': {
+          'source': path.name,
+          'section': current_section,
+          'source_type': 'company'
+        }
+      })
+  
+  for line in lines:
+    heading = _classify_line(line)
+
+    if heading is not None: 
+      # Nếu có tiêu đề mới thì hoàn thiện chunk trước đó, tạo chunk mới có section mới là heading
+      _flush() 
+      current_section = heading 
+      current_lines = [line]
+    else:
+      # Nếu không phải tiêu đề thì thêm dòng này vào chunk hiện tại
+      current_lines.append(line)
+
+    chunk_text = '\n'.join(current_lines)
+    if len(chunk_text) > max_chunk_size:
+      _flush()
+      current_lines = []
+ 
+  _flush() # Lưu lại chunk cuối cùng
+
+  log.info(f'Extracted {len(chunks)} chunks from PDF')
+  for c in chunks:
+    log.debug(f'Section = {c['metadata']['section']!r} | len = {len(c['text'])}')
+  return chunks
