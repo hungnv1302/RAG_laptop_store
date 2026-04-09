@@ -1,6 +1,6 @@
 from __future__ import annotations
-from typing import Any, Optional
-from pydantic import BaseModel, Field
+from typing import Any
+from pydantic import BaseModel, Field, field_validator
 
 class Product(BaseModel):
   id: str
@@ -14,6 +14,21 @@ class Product(BaseModel):
   image_url: str = ""
   product_url: str = ""
   description: str = ""
+
+  @field_validator('brand')
+  @classmethod
+  def sanitize_brand(cls, v: str) -> str:
+    # Chuẩn hóa tên brand
+    canonical = {
+      'hp': 'HP',
+      'msi': 'MSI',
+      'thinkpad': 'ThinkPad',
+      "thinkbook": "ThinkBook",
+      "imac": "iMac",
+      "macbook": "MacBook"
+    }
+    v_lower = v.strip().lower()
+    return canonical.get(v_lower, v_lower.title())
 
 class RetrievedDoc(BaseModel):
   text: str
