@@ -21,8 +21,8 @@ def retrieve_knowledge(query: str, top_k: int | None = None, final_top_k: int | 
 
   # 1. Parse intent
   intent = parse_intent(query)
-  where = build_where_clause(intent)
-  meta_filter = build_metadata_filter(intent)
+  where = build_where_clause(intent) # filter về hãng, giá,...
+  meta_filter = build_metadata_filter(intent) # filter về gpu, ram, storage
 
   # 2. Embed query
   query_emb = embed_texts(query)
@@ -37,6 +37,81 @@ def retrieve_knowledge(query: str, top_k: int | None = None, final_top_k: int | 
 
   ids = raw['ids'][0] if raw['ids'] else [] # trong raw thuộc tính ids có dạng [[id1, id2,...]]
   
+  # Ít kết quả trả về hoặc không có filter thì gắn thêm thông tin công ty và sản phẩm có liên quan
+  if len(ids) < 3:
+    log.info('Broadening search to include all knowledge types')
+    broad_raw = vector_search(
+      collection_name=cfg.qdrant.knowledge_collection,
+      query_embedding=query_emb,
+      top_k = top_k
+    )
+
+    existing_ids = set(ids) # Tạo set để tránh trùng lặp point
+    for i, doc_id in enumerate(broad_raw['ids'][0]):
+      if doc_id not in existing_ids:
+        raw['ids'][0].append(doc_id)
+        raw['documents'][0].append(broad_raw['documents'][0][i])
+        raw['metadatas'][0].append(broad_raw['metadatas'][0][i])
+        raw['distances'][0].append(broad_raw['distances'][0][i])
+    
+    ids = raw['ids'][0]
+
+  if not ids:
+    elapsed = (time.time() - start) * 1000
+    return [], intent, elapsed
+  
+  # 4. Build candidate list
+  documents = raw['documents'][0]
+  metadatas = raw['metadatas'][0]
+  distances = raw['distances'][0]
+
+  candidates: list[dict[str, Any]] = []
+  for i, doc_id in enumerate(ids):
+    vector_score = 1.0 - distances[i]
+    candidates.append({
+      'id': doc_id,
+      'text': documents[i],
+      'metadata': metadatas[i],
+      'vector_score': max(0, vector_score)
+    })
+
+  # 5. Filter các candidate điểm thấp
+  min_score = cfg.retrieval.similarity_threshold
+  candidates = [c for c in candidates if c['vector_score'] >= min_score]
+  if not candidates:
+    elapsed = (time.time() - start) * 1000
+    return [], intent, elapsed
+  
+  # 6. Filter bằng meta_filter
+  product_candidates = [c for c in candidates if c['metadata'].get('type') == 'product']
+  other_candidates = [c for c in candidates if c['metadata'].get('type') != 'product']
+
+  filtered_products = post_filter_results(product_candidates, meta_filter)
+  candidates = filtered_products + other_candidates
+
+  # 7. BM25 rerank
+  candidates = bm25_rerank(query, candidates)
+
+  # 8. Hybrid score
+  candidates = compute_hybrid_scores(candidates)
+
+  # 9. Take top results
+  top_candidates = candidates[:final_top_k]
+
+  # 10. Convert sang RetrivedDoc
+  docs: list[RetrievedDoc] = []
+  for c in top_candidates:
+    docs.append(RetrievedDoc(
+      text= c['text'],
+      metadata = c['metadata'],
+      score = c['hybrid_score'],
+      source_type = c['metadata'].get('type', 'unknown')
+    ))
+
+  elapsed = (time.time() - start) * 1000
+  log.info(f'Retrieved {len(docs)} knowledge chunks in {elapsed:.0f} ms')
+  return docs, intent, elapsed
+
 
   
 
