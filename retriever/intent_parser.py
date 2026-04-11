@@ -34,6 +34,14 @@ GPU_KEYWORDS = [
     "rtx 3050", "rtx 3500",
 ]
 
+CPU_KEYWORDS = [
+    "core i9", "core i7", "core i5", "core i3",
+    "ultra 9", "ultra 7", "ultra 5",
+    "ryzen 9", "ryzen 7", "ryzen 5", "ryzen 3",
+    "m4", "m3", "m2", "m1",
+    "i9", "i7", "i5", "i3"
+]
+
 PRICE_PATTERNS = [
     # "từ 20 đến 30 triệu" / "20-30 triệu"
     (re.compile(r"(?:từ\s*)?(\d+(?:[.,]\d+)?)\s*(?:[-–đến tới]+)\s*(\d+(?:[.,]\d+)?)\s*(?:triệu|tr|m)", re.I), "range"),
@@ -95,6 +103,12 @@ def parse_intent(query: str) -> dict[str, Any]:
   for gpu in GPU_KEYWORDS:
     if gpu in q:
       intent['gpu'] = gpu.upper()
+      break
+
+  # CPU
+  for cpu in CPU_KEYWORDS:
+    if cpu in q:
+      intent['cpu'] = cpu
       break
 
   # RAM

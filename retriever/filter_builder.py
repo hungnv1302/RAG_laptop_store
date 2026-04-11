@@ -42,6 +42,8 @@ def build_metadata_filter(intent: dict[str, Any]) -> dict[str, Any]:
   filters = {}
   if 'gpu' in intent:
     filters['gpu_keyword'] = intent['gpu']
+  if 'cpu' in intent:
+    filters['cpu_keyword'] = intent['cpu']
   if 'ram_size' in intent:
     filters['ram_size'] = intent['ram_size']
   if 'storage_tb' in intent:
@@ -62,7 +64,12 @@ def post_filter_results(results: list[dict[str, Any]], meta_filter: dict[str, An
       gpu = meta.get('gpu', '').upper()
       if meta_filter['gpu_keyword'] not in gpu:
         match = False
-
+    
+    if 'cpu_keyword' in meta_filter:
+      cpu = meta.get('cpu', '').lower()
+      if meta_filter['cpu_keyword'] not in cpu:
+        match = False
+ 
     if 'ram_size' in meta_filter:
       ram_str = meta.get('ram', '')
       ram_nums = re.findall(r'(\d+)\s*GB', ram_str, re.I)
