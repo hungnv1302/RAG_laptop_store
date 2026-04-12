@@ -37,3 +37,8 @@ retrieval:
 server:
   host: "0.0.0.0"
   port: 8000
+
+# ─── Supabase ────────────────────────────────────────────
+supabase:
+  url: "" # Placeholder, set via SUPABASE_URL env
+  key: "" # Placeholder, set via SUPABASE_KEY env

@@ -65,6 +65,11 @@ class _Server:
     self.host = d.get('host', '0.0.0.0')
     self.port = d.get('port', 8000)
 
+class _Supabase:
+  def __init__(self, d: dict):
+    self.url = os.getenv('SUPABASE_URL', d.get('url', ''))
+    self.key = os.getenv('SUPABASE_KEY', d.get('key', ''))
+
 class Config:
   def __init__(self):
     raw = _load_yaml()
@@ -74,6 +79,7 @@ class Config:
     self.openai = _OpenAI(raw["openai"])
     self.retrieval = _Retrieval(raw["retrieval"])
     self.server = _Server(raw["server"])
+    self.supabase = _Supabase(raw.get("supabase", {}))
 
 cfg = Config()
 
