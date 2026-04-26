@@ -24,8 +24,11 @@ def _get_supabase() -> Optional[Client]:
       return None
   return _supabase
 
-def get_history(user_id: str, session_id: str, limit: int = 20) -> list[dict[str, str]]:
-  # Lấy limit message gần nhất của session_id từ Supabase, sắp xếp theo created_at giảm dần, sau đó đảo lại để có thứ tự thời gian tăng dần
+MAX_STORE_MESSAGES = 20 # Số lượng message tối đa được lưu trong lịch sử. Khi vượt quá sẽ xóa bớt message cũ nhất để giữ lại những message gần đây nhất.
+DEFAULT_SESSION_ID = 6 # Số lượng message lấy để lấy context
+
+def get_history(user_id: str, session_id: str, limit: int = DEFAULT_SESSION_ID) -> list[dict[str, str]]:
+  # Lấy lịch sử chat từ Supabase dựa trên user_id và session_id, giới hạn số lượng message trả về bằng limit
   client = _get_supabase()
   if not client:
     return []
@@ -47,21 +50,42 @@ def get_history(user_id: str, session_id: str, limit: int = 20) -> list[dict[str
     return []
   
 def add_to_history(user_id: str, session_id: str, role: str, content: str) -> None:
-  # Thêm message vào Supabase với user_id, session_id, role, content. created_at sẽ tự động do Supabase quản lý
+  # Thêm message vào Supabase và xóa những tin nhắn cũ
   client = _get_supabase()
   if not client:
     return 
   
   try:
+    # 1. Thêm tin nhắn mới
     client.table('chat_history').insert({
       'user_id': user_id,
       'session_id': session_id,
       'role': role,
       'content': content
     }).execute()
-    log.debug(f'Added message to history for user_id={user_id}, session_id={session_id}, role={role}')
+    log.debug(f'Saved {role} message to session {session_id}')
+
+    # 2. Xóa tin nhắn cũ nếu vượt quá MAX_STORE_MESSAGES
+    response = client.table('chat_history')\
+      .select('created_at')\
+      .eq('session_id', session_id)\
+      .order('created_at', desc=True)\
+      .limit(1)\
+      .offset(MAX_STORE_MESSAGES - 1)\
+      .execute()
+    
+    if response.data:
+      threshold_time = response.data[0]['created_at']
+      client.table('chat_history')\
+        .delete()\
+        .eq('session_id', session_id)\
+        .lt('create_at', threshold_time)\
+        .execute()
+      log.debug(f'Cleaned up old messages in session {session_id} created before {threshold_time}')
+  
   except Exception as e:
-    log.error(f'Error adding message to history in Supabase: {e}')
+    log.error(f'Error saving message to Supabase: {e}')
+
 
 def reset_history(user_id: str, session_id: str) -> None:
   # Xóa tất cả message của session_id trong Supabase
